@@ -13,7 +13,7 @@ from model_registry import list_versions, activate_version
 from datetime import datetime
 from io import BytesIO
 
-# --- Lead storage helpers ---
+# --- Lead storage helpers (unchanged) ---
 LEADS_CSV = "data/user_leads.csv"
 UPLOADS_DIR = "data/uploads"
 
@@ -47,19 +47,141 @@ def save_uploaded_images(files, lead_id: str) -> list[str]:
             out.write(f.read())
         saved.append(path)
     return saved
-st.set_page_config(page_title="Property Valuation MLOps", layout="wide", page_icon="🏠")
 
+# ---------- GLOBAL STYLING HELPERS ----------
+
+def set_background(image_file: str = "assets/background.jpg"):
+    """Set a full-page background image if file exists."""
+    if not os.path.exists(image_file):
+        return
+    with open(image_file, "rb") as f:
+        data = base64.b64encode(f.read()).decode()
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/jpg;base64,{data}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def set_global_style():
+    """Inject custom CSS for a modern, property-style look."""
+    st.markdown(
+        """
+        <style>
+        /* Center main content slightly and add padding */
+        .main {
+            padding: 2rem 3rem;
+        }
+
+        /* Card-like look for metrics */
+        div[data-testid="metric-container"] {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 1rem 1.2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        /* Titles */
+        h1, h2, h3, h4 {
+            font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        }
+
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #102A43 0%, #243B53 40%, #F0F4F8 100%);
+            color: white;
+        }
+
+        section[data-testid="stSidebar"] .stRadio, 
+        section[data-testid="stSidebar"] .stSelectbox, 
+        section[data-testid="stSidebar"] label {
+            color: #E0E7FF !important;
+        }
+
+        /* DataFrames */
+        .stDataFrame, .stTable {
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 10px;
+            padding: 0.5rem;
+        }
+
+        /* Buttons */
+        .stButton>button {
+            border-radius: 999px;
+            padding: 0.4rem 1.2rem;
+            border: none;
+            background: #2563EB;
+            color: white;
+            font-weight: 600;
+        }
+        .stButton>button:hover {
+            background: #1D4ED8;
+        }
+
+        /* Tabs */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0.5rem;
+        }
+        .stTabs [data-baseweb="tab"] {
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 999px;
+            padding: 0.3rem 0.8rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ---------- PAGE CONFIG & BRANDING ----------
+
+ICON_PATH = "assets/logo.png"
+if os.path.exists(ICON_PATH):
+    st.set_page_config(
+        page_title="Property Valuation MLOps",
+        layout="wide",
+        page_icon=ICON_PATH,
+    )
+else:
+    st.set_page_config(
+        page_title="Property Valuation MLOps",
+        layout="wide",
+        page_icon="🏠",
+    )
+
+set_background("assets/background.jpg")
+set_global_style()
+
+if os.path.exists(ICON_PATH):
+    st.sidebar.image(ICON_PATH, use_column_width=True)
 st.sidebar.header("🏠 Property Valuation MLOps")
-page = st.sidebar.selectbox("Navigate to:", ["Dashboard", "Data Processing", "Model Training", "Predictions", "Model Monitoring"])
+
+page = st.sidebar.selectbox(
+    "Navigate to:",
+    ["Dashboard", "Data Processing", "Model Training", "Predictions", "Model Monitoring"],
+)
 
 def kpi_card(col, title, value, delta=None):
     with col:
         st.metric(label=title, value=value, delta=delta)
 
+# ---------- PAGES ----------
+
 if page == "Dashboard":
-    st.title("Residential Property Valuation MLOps Dashboard")
+    from model_monitor import compute_perf_summary, load_recent_predictions
+
+    st.title("🏙️ Residential Property Valuation MLOps Dashboard")
+
+    # KPIs
     kpis = compute_perf_summary()
-    c1,c2,c3,c4,c5,c6 = st.columns(6)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     kpi_card(c1, "Models Trained", kpis["models_trained"], "+2" if kpis["models_trained"] else None)
     kpi_card(c2, "Active Model Accuracy", f"{kpis['active_model_accuracy']*100:.1f}%", "+1.2%")
     kpi_card(c3, "Predictions Made", kpis["predictions_made"], "+156")
@@ -67,117 +189,232 @@ if page == "Dashboard":
     kpi_card(c5, "Avg Latency", f"{kpis['avg_latency_ms']} ms")
     kpi_card(c6, "Throughput", f"{kpis['throughput_per_min']} /min")
 
-    st.subheader("Model Performance Overview")
-    perf_csv = "reports/model_performance.csv"
-    if not os.path.exists(perf_csv):
-        st.info("No performance report yet. Train models in the 'Model Training' section.")
-    else:
-        dfp = pd.read_csv(perf_csv)
-        st.dataframe(dfp)
-        colA, colB = st.columns(2)
-        with colA:
-            fig = px.bar(dfp, x="Model", y="MAE", title="Mean Absolute Error by Model")
-            st.plotly_chart(fig, use_container_width=True)
-        with colB:
-            fig = px.bar(dfp, x="Model", y="R2", title="R² Score by Model")
-            st.plotly_chart(fig, use_container_width=True)
+    st.markdown("### 📊 Model Performance & Activity")
 
-    st.subheader("Recent Predictions")
-    rec = load_recent_predictions()
-    st.dataframe(rec)
+    perf_csv = "reports/model_performance.csv"
+    recent = load_recent_predictions()
+
+    tab_perf, tab_recent = st.tabs(["Model Performance", "Recent Predictions"])
+
+    with tab_perf:
+        if not os.path.exists(perf_csv):
+            st.info("No performance report yet. Train models in the **Model Training** section.")
+        else:
+            dfp = pd.read_csv(perf_csv)
+            st.dataframe(dfp, use_container_width=True)
+            colA, colB = st.columns(2)
+            with colA:
+                fig = px.bar(
+                    dfp,
+                    x="Model",
+                    y="MAE",
+                    title="Mean Absolute Error by Model",
+                    text="MAE",
+                )
+                fig.update_traces(textposition="outside")
+                st.plotly_chart(fig, use_container_width=True)
+            with colB:
+                fig = px.bar(
+                    dfp,
+                    x="Model",
+                    y="R2",
+                    title="R² Score by Model",
+                    text="R2",
+                )
+                fig.update_traces(textposition="outside")
+                st.plotly_chart(fig, use_container_width=True)
+
+    with tab_recent:
+        if recent.empty:
+            st.info("No predictions logged yet. Make some predictions to see activity here.")
+        else:
+            # quick filter by location
+            locations = ["All"] + sorted(recent["location"].dropna().unique().tolist())
+            choice = st.selectbox("Filter by location", locations)
+            rf = recent.copy()
+            if choice != "All":
+                rf = rf[rf["location"] == choice]
+
+            st.dataframe(rf.sort_values("timestamp", ascending=False), use_container_width=True)
+
+            # small time-series chart
+            try:
+                rf_ts = rf.copy()
+                rf_ts["timestamp"] = pd.to_datetime(rf_ts["timestamp"])
+                rf_ts = rf_ts.sort_values("timestamp")
+                fig = px.line(
+                    rf_ts,
+                    x="timestamp",
+                    y="predicted_value",
+                    title="Predicted Values Over Time",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception:
+                pass
+
+            st.download_button(
+                "Download recent predictions as CSV",
+                rf.to_csv(index=False).encode("utf-8"),
+                file_name="recent_predictions.csv",
+                mime="text/csv",
+            )
 
 elif page == "Data Processing":
-    st.title("Data Processing")
+    st.title("🧼 Data Processing & Quality Checks")
+    st.write("Upload raw property data and see how it’s cleaned and enriched with features.")
+
     f = st.file_uploader("Upload CSV with property data", type=["csv"])
     if f is not None:
         df = pd.read_csv(f)
-        st.write("Raw Data", df.head())
+        st.markdown("#### Raw Data Preview")
+        st.dataframe(df.head(), use_container_width=True)
+
         clean, report = validate_and_clean(df)
-        st.write("Engineered & Cleaned Data", clean.head())
-        st.write("Data Quality Report", report)
-        st.download_button("Download Cleaned CSV", clean.to_csv(index=False).encode("utf-8"),
-                           file_name="cleaned_properties.csv", mime="text/csv")
+
+        st.markdown("#### Engineered & Cleaned Data")
+        st.dataframe(clean.head(), use_container_width=True)
+
+        st.markdown("#### Data Quality Report")
+        st.json(report)
+
+        st.download_button(
+            "⬇️ Download Cleaned CSV",
+            clean.to_csv(index=False).encode("utf-8"),
+            file_name="cleaned_properties.csv",
+            mime="text/csv",
+        )
     else:
         st.info("Upload a CSV to see processing and quality checks.")
 
 elif page == "Model Training":
-    st.title("Model Training")
-    st.write("Upload a historical dataset with target column `price`.")
+    from model_trainer import train_and_select
+
+    st.title("🧠 Model Training")
+    st.write("Upload a historical dataset with target column `price` to train valuation models.")
+
     f = st.file_uploader("Training CSV", type=["csv"], key="train_csv")
     if f is not None:
         df = pd.read_csv(f)
         if "price" not in df.columns:
-            st.error("No 'price' column found.")
+            st.error("No `price` column found. Please include the target variable.")
         else:
             df, _ = validate_and_clean(df)
-            with st.spinner("Training models..."):
+            with st.spinner("Training models... this can take a bit on larger datasets."):
                 results, best_name = train_and_select(df)
-            st.success(f"Training complete. Best model: {best_name}")
-            st.dataframe(pd.DataFrame(results))
+            st.success(f"✅ Training complete. Best model: **{best_name}**")
+
+            res_df = pd.DataFrame(results).sort_values("R2", ascending=False)
+            st.dataframe(res_df, use_container_width=True)
     else:
         st.info("Upload training data to start.")
 
 elif page == "Predictions":
-    st.title("Predictions")
-    st.subheader("Single Property Valuation")
-    cols1 = st.columns(2)
-    with cols1[0]:
-        bedrooms = st.number_input("Number of bedrooms", 1, 10, 3)
-        bathrooms = st.number_input("Number of bathrooms", 1, 5, 2)
-        sqft = st.number_input("Square footage", 500, 10000, 2000)
-        lot_size = st.number_input("Lot size (sqft)", 1000, 50000, 8000)
-    with cols1[1]:
-        age = st.number_input("Property age (years)", 0, 100, 15)
-        garage = st.selectbox("Garage", CONFIG.garages)
-        location = st.selectbox("Location", CONFIG.locations)
-        property_type = st.selectbox("Property Type", CONFIG.property_types)
-    if st.button("Predict Property Value"):
-        payload = {"bedrooms":bedrooms,"bathrooms":bathrooms,"sqft":sqft,"lot_size":lot_size,"age":age,
-                   "garage":garage,"location":location,"property_type":property_type}
-        res = predict_single(payload)
-        if "error" in res:
-            st.error(res["error"])
+    from model_predictor import predict_single, predict_batch
+
+    st.title("🔮 Property Value Predictions")
+
+    tab_single, tab_batch = st.tabs(["Single Property", "Batch Properties"])
+
+    with tab_single:
+        st.subheader("🏠 Single Property Valuation")
+
+        cols1 = st.columns(2)
+        with cols1[0]:
+            bedrooms = st.number_input("Number of bedrooms", 1, 10, 3)
+            bathrooms = st.number_input("Number of bathrooms", 1, 5, 2)
+            sqft = st.number_input("Square footage", 500, 10000, 2000)
+            lot_size = st.number_input("Lot size (sqft)", 1000, 50000, 8000)
+        with cols1[1]:
+            age = st.number_input("Property age (years)", 0, 100, 15)
+            garage = st.selectbox("Garage", CONFIG.garages)
+            location = st.selectbox("Location", CONFIG.locations)
+            property_type = st.selectbox("Property Type", CONFIG.property_types)
+
+        if st.button("Predict Property Value", key="single_predict"):
+            payload = {
+                "bedrooms": bedrooms,
+                "bathrooms": bathrooms,
+                "sqft": sqft,
+                "lot_size": lot_size,
+                "age": age,
+                "garage": garage,
+                "location": location,
+                "property_type": property_type,
+            }
+            res = predict_single(payload)
+            if "error" in res:
+                st.error(res["error"])
+            else:
+                st.success(
+                    f"Estimated market value: **${res['prediction']:,}** "
+                    f"(confidence: {res['confidence']*100:.1f}%)"
+                )
+                if res.get("explanation"):
+                    st.subheader("Feature Importance for this Prediction")
+                    exp_df = pd.DataFrame(
+                        {
+                            "feature": list(res["explanation"].keys()),
+                            "importance": list(res["explanation"].values()),
+                        }
+                    )
+                    fig = px.bar(exp_df, x="importance", y="feature", orientation="h")
+                    st.plotly_chart(fig, use_container_width=True)
+
+    with tab_batch:
+        st.subheader("📁 Batch Property Predictions")
+
+        f = st.file_uploader(
+            "Upload CSV file with property features",
+            type=["csv"],
+            key="batch_csv",
+        )
+        if f is not None:
+            df = pd.read_csv(f)
+            try:
+                out = predict_batch(df)
+                st.markdown("#### Preview of Predictions")
+                st.dataframe(out.head(), use_container_width=True)
+                st.download_button(
+                    "⬇️ Download Predictions CSV",
+                    out.to_csv(index=False).encode("utf-8"),
+                    file_name="batch_predictions.csv",
+                    mime="text/csv",
+                )
+            except Exception as e:
+                st.error(str(e))
         else:
-            st.success(f"Predicted value: ${res['prediction']:,} | Confidence: {res['confidence']*100:.1f}%")
-            if res.get('explanation'):
-                st.subheader('Feature Importance for this Prediction')
-                exp_df = pd.DataFrame({'feature': list(res['explanation'].keys()), 'importance': list(res['explanation'].values())})
-                fig = px.bar(exp_df, x='importance', y='feature', orientation='h')
-                st.plotly_chart(fig, use_container_width=True)
-    st.markdown("---")
-    st.subheader("Batch Property Predictions")
-    f = st.file_uploader("Upload CSV file with property features", type=["csv"], key="batch_csv")
-    if f is not None:
-        df = pd.read_csv(f)
-        try:
-            out = predict_batch(df)
-            st.write(out.head())
-            st.download_button("Download Predictions CSV", out.to_csv(index=False).encode("utf-8"),
-                               file_name="batch_predictions.csv", mime="text/csv")
-        except Exception as e:
-            st.error(str(e))
+            st.info("Upload a CSV with property features (no `price` column needed).")
 
 elif page == "Model Monitoring":
-    st.title("Model Monitoring")
+    from model_monitor import compute_perf_summary, load_recent_predictions
+    from model_registry import list_versions, activate_version
+
+    st.title("📈 Model Monitoring & Registry")
+
     kpis = compute_perf_summary()
-    c1,c2,c3,c4,c5,c6 = st.columns(6)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     kpi_card(c1, "Models Trained", kpis["models_trained"])
     kpi_card(c2, "Active Model Accuracy", f"{kpis['active_model_accuracy']*100:.1f}%")
     kpi_card(c3, "Predictions Made", kpis["predictions_made"])
     kpi_card(c4, "Data Drift Score", kpis["data_drift_score"])
-    st.metric("Avg Latency", f"{kpis['avg_latency_ms']} ms")
-    st.metric("Throughput", f"{kpis['throughput_per_min']} /min")
+    kpi_card(c5, "Avg Latency", f"{kpis['avg_latency_ms']} ms")
+    kpi_card(c6, "Throughput", f"{kpis['throughput_per_min']} /min")
 
     rec = load_recent_predictions()
     st.subheader("Recent Predictions")
-    st.dataframe(rec)
+    st.dataframe(rec, use_container_width=True)
 
     st.subheader("Model Registry")
     versions = list_versions()
     if versions:
         reg_df = pd.DataFrame(versions)
-        st.dataframe(reg_df[["version","name","created_at","metrics"]])
-        choose = st.selectbox("Activate version", [v["version"] for v in versions], key="ver_select")
+        st.dataframe(reg_df[["version", "name", "created_at", "metrics"]], use_container_width=True)
+
+        choose = st.selectbox(
+            "Activate version",
+            [v["version"] for v in versions],
+            key="ver_select",
+        )
         if st.button("Activate Selected Version"):
             try:
                 activate_version(choose)
