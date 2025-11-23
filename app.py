@@ -6,20 +6,18 @@ import os
 import base64
 from config import CONFIG
 from data_processor import validate_and_clean, engineer_features
-from model_trainer import train_and_select
-from model_predictor import predict_single, predict_batch
-from model_monitor import compute_perf_summary, load_recent_predictions
-from model_registry import list_versions, activate_version
 from datetime import datetime
 from io import BytesIO
 
-# --- Lead storage helpers (unchanged) ---
+# --- Lead storage helpers (same as before) ---
 LEADS_CSV = "data/user_leads.csv"
 UPLOADS_DIR = "data/uploads"
+
 
 def _ensure_dirs():
     os.makedirs("data", exist_ok=True)
     os.makedirs(UPLOADS_DIR, exist_ok=True)
+
 
 def save_user_lead(row: dict) -> None:
     """Append a single lead row to CSV with header if new."""
@@ -27,6 +25,7 @@ def save_user_lead(row: dict) -> None:
     df = pd.DataFrame([row])
     header = not os.path.exists(LEADS_CSV)
     df.to_csv(LEADS_CSV, mode="a", header=header, index=False)
+
 
 def save_uploaded_images(files, lead_id: str) -> list[str]:
     """Save uploaded images to a per-lead folder and return relative paths."""
@@ -47,6 +46,7 @@ def save_uploaded_images(files, lead_id: str) -> list[str]:
             out.write(f.read())
         saved.append(path)
     return saved
+
 
 # ---------- GLOBAL STYLING HELPERS ----------
 
@@ -69,6 +69,7 @@ def set_background(image_file: str = "assets/background.jpg"):
         """,
         unsafe_allow_html=True,
     )
+
 
 def set_global_style():
     """Inject custom CSS for a modern, property-style look."""
@@ -100,8 +101,8 @@ def set_global_style():
             color: white;
         }
 
-        section[data-testid="stSidebar"] .stRadio, 
-        section[data-testid="stSidebar"] .stSelectbox, 
+        section[data-testid="stSidebar"] .stRadio,
+        section[data-testid="stSidebar"] .stSelectbox,
         section[data-testid="stSidebar"] label {
             color: #E0E7FF !important;
         }
@@ -140,6 +141,7 @@ def set_global_style():
         unsafe_allow_html=True,
     )
 
+
 # ---------- PAGE CONFIG & BRANDING ----------
 
 ICON_PATH = "assets/logo.png"
@@ -168,9 +170,11 @@ page = st.sidebar.selectbox(
     ["Dashboard", "Data Processing", "Model Training", "Predictions", "Model Monitoring"],
 )
 
+
 def kpi_card(col, title, value, delta=None):
     with col:
         st.metric(label=title, value=value, delta=delta)
+
 
 # ---------- PAGES ----------
 
@@ -196,68 +200,107 @@ if page == "Dashboard":
 
     tab_perf, tab_recent = st.tabs(["Model Performance", "Recent Predictions"])
 
+    # --- Interactive model performance tab ---
     with tab_perf:
         if not os.path.exists(perf_csv):
             st.info("No performance report yet. Train models in the **Model Training** section.")
         else:
             dfp = pd.read_csv(perf_csv)
+
+            st.markdown("#### Raw performance table")
             st.dataframe(dfp, use_container_width=True)
-            colA, colB = st.columns(2)
-            with colA:
-                fig = px.bar(
-                    dfp,
-                    x="Model",
-                    y="MAE",
-                    title="Mean Absolute Error by Model",
-                    text="MAE",
+
+            st.markdown("#### Interactive performance view")
+
+            cols_ctrl = st.columns([2, 2, 2])
+            with cols_ctrl[0]:
+                metric = st.selectbox("Metric", ["MAE", "RMSE", "R2"], index=2)
+            with cols_ctrl[1]:
+                chart_type = st.radio("Chart type", ["Bar", "Line"], horizontal=True)
+            with cols_ctrl[2]:
+                models_selected = st.multiselect(
+                    "Models",
+                    options=dfp["Model"].tolist(),
+                    default=dfp["Model"].tolist(),
                 )
-                fig.update_traces(textposition="outside")
-                st.plotly_chart(fig, use_container_width=True)
-            with colB:
-                fig = px.bar(
-                    dfp,
-                    x="Model",
-                    y="R2",
-                    title="R² Score by Model",
-                    text="R2",
-                )
-                fig.update_traces(textposition="outside")
+
+            dfp_f = dfp[dfp["Model"].isin(models_selected)].copy()
+
+            if dfp_f.empty:
+                st.warning("No models selected – please choose at least one.")
+            else:
+                title = f"{metric} by Model"
+                if chart_type == "Bar":
+                    fig = px.bar(
+                        dfp_f,
+                        x="Model",
+                        y=metric,
+                        title=title,
+                        text=metric,
+                    )
+                    fig.update_traces(textposition="outside")
+                else:
+                    fig = px.line(
+                        dfp_f,
+                        x="Model",
+                        y=metric,
+                        title=title,
+                        markers=True,
+                    )
                 st.plotly_chart(fig, use_container_width=True)
 
+    # --- Interactive recent predictions tab ---
     with tab_recent:
         if recent.empty:
             st.info("No predictions logged yet. Make some predictions to see activity here.")
         else:
-            # quick filter by location
-            locations = ["All"] + sorted(recent["location"].dropna().unique().tolist())
-            choice = st.selectbox("Filter by location", locations)
-            rf = recent.copy()
-            if choice != "All":
-                rf = rf[rf["location"] == choice]
+            st.markdown("#### Filters")
 
+            c1, c2 = st.columns(2)
+            with c1:
+                locations = ["All"] + sorted(recent["location"].dropna().unique().tolist())
+                choice_loc = st.selectbox("Location", locations)
+            with c2:
+                max_days = 60
+                days_back = st.slider(
+                    "Show predictions from last N days",
+                    min_value=1,
+                    max_value=max_days,
+                    value=30,
+                )
+
+            rf = recent.copy()
+            rf["timestamp"] = pd.to_datetime(rf["timestamp"], errors="coerce")
+
+            if choice_loc != "All":
+                rf = rf[rf["location"] == choice_loc]
+
+            cutoff = rf["timestamp"].max() - pd.Timedelta(days=days_back)
+            rf = rf[rf["timestamp"] >= cutoff]
+
+            st.markdown("#### Filtered predictions table")
             st.dataframe(rf.sort_values("timestamp", ascending=False), use_container_width=True)
 
-            # small time-series chart
-            try:
-                rf_ts = rf.copy()
-                rf_ts["timestamp"] = pd.to_datetime(rf_ts["timestamp"])
-                rf_ts = rf_ts.sort_values("timestamp")
+            if not rf.empty:
+                rf_ts = rf.sort_values("timestamp")
                 fig = px.line(
                     rf_ts,
                     x="timestamp",
                     y="predicted_value",
                     title="Predicted Values Over Time",
+                    markers=True,
                 )
                 st.plotly_chart(fig, use_container_width=True)
-            except Exception:
-                pass
 
-            st.download_button(
-                "Download recent predictions as CSV",
-                rf.to_csv(index=False).encode("utf-8"),
-                file_name="recent_predictions.csv",
-                mime="text/csv",
-            )
+                st.download_button(
+                    "⬇️ Download filtered predictions",
+                    rf.to_csv(index=False).encode("utf-8"),
+                    file_name="filtered_predictions.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.warning("No predictions match the current filters.")
+
 
 elif page == "Data Processing":
     st.title("🧼 Data Processing & Quality Checks")
@@ -286,6 +329,7 @@ elif page == "Data Processing":
     else:
         st.info("Upload a CSV to see processing and quality checks.")
 
+
 elif page == "Model Training":
     from model_trainer import train_and_select
 
@@ -308,6 +352,7 @@ elif page == "Model Training":
     else:
         st.info("Upload training data to start.")
 
+
 elif page == "Predictions":
     from model_predictor import predict_single, predict_batch
 
@@ -315,6 +360,7 @@ elif page == "Predictions":
 
     tab_single, tab_batch = st.tabs(["Single Property", "Batch Properties"])
 
+    # --- Single property tab ---
     with tab_single:
         st.subheader("🏠 Single Property Valuation")
 
@@ -360,6 +406,7 @@ elif page == "Predictions":
                     fig = px.bar(exp_df, x="importance", y="feature", orientation="h")
                     st.plotly_chart(fig, use_container_width=True)
 
+    # --- Batch predictions tab ---
     with tab_batch:
         st.subheader("📁 Batch Property Predictions")
 
@@ -384,6 +431,7 @@ elif page == "Predictions":
                 st.error(str(e))
         else:
             st.info("Upload a CSV with property features (no `price` column needed).")
+
 
 elif page == "Model Monitoring":
     from model_monitor import compute_perf_summary, load_recent_predictions
