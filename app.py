@@ -50,7 +50,7 @@ def save_uploaded_images(files, lead_id: str) -> list[str]:
 
 # ---------- GLOBAL STYLING HELPERS ----------
 
-def set_background("assets/new_bg.jpg"):
+def set_background(image_file: str = "assets/new_bg.jpg"):
     """Set a full-page background image if file exists."""
     if not os.path.exists(image_file):
         return
