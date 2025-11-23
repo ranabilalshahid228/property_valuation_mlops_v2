@@ -1,0 +1,21 @@
+bedrooms,bathrooms,sqft,lot_size,age,location,property_type,garage
+4,3,2635,11024,67,New Development,Condo,None
+5,1,1599,7956,63,Suburbs,Single Family,None
+3,2,1059,5712,16,Suburbs,Single Family,Detached
+5,1,3647,14724,11,Historic,Condo,Detached
+5,1,2419,9470,21,New Development,Condo,Attached
+2,2,980,18420,16,New Development,Multi Family,Detached
+3,1,3966,3125,9,Suburbs,Multi Family,Carport
+3,3,2587,11814,64,Downtown,Multi Family,Carport
+3,1,3966,9473,21,Historic,Condo,Attached
+5,2,1366,10077,49,New Development,Condo,None
+4,2,792,9570,13,Suburbs,Townhouse,None
+3,2,1371,10166,63,New Development,Multi Family,Detached
+5,1,2669,5100,46,Historic,Multi Family,Carport
+2,2,760,8283,28,Historic,Multi Family,None
+4,2,3381,14726,75,Waterfront,Single Family,Attached
+2,1,3822,10646,35,Suburbs,Townhouse,Attached
+4,3,4174,6471,51,Historic,Multi Family,Carport
+5,1,1728,14990,75,Waterfront,Multi Family,Attached
+1,2,2189,19089,6,Waterfront,Multi Family,Attached
+4,2,1303,14451,28,New Development,Single Family,Carport

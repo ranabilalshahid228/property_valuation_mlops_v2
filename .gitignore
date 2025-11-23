@@ -1,0 +1,17 @@
+# virtual environments
+.venv/
+env/
+venv/
+
+# python cache
+__pycache__/
+*.pyc
+
+# runtime artifacts (but keep .gitkeep)
+logs/*
+reports/*
+models/*
+
+!logs/.gitkeep
+!reports/.gitkeep
+!models/.gitkeep
